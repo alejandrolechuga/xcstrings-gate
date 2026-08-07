@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Matrix across the Python versions we advertise (>=3.9 in pyproject.toml).
+  # The tool itself is stdlib-only at runtime; the matrix guards against
+  # accidental use of syntax / stdlib features unavailable on older Pythons.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test deps
+        run: python -m pip install --upgrade pip pytest
+      - name: Run test suite
+        run: python -m pytest -q
+      - name: Serializer self-check on the fixture
+        run: python xcstrings_io.py tests/fixtures/Sample.xcstrings

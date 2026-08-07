@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xcstrings-gate"
+version = "0.1.0"
+description = "A ratcheting translation-coverage gate for Xcode String Catalogs (.xcstrings). Offline, stdlib-only, correct on plurals."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Alejandro Lechuga" }]
+keywords = ["xcode", "xcstrings", "i18n", "localization", "ci", "translation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Internationalization",
+    "Topic :: Software Development :: Localization",
+    "Topic :: Software Development :: Quality Assurance",
+]
+# Runtime deps: none. Stdlib only. This is a design goal, not an oversight.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/alejandrolechuga/xcstrings-gate"
+Issues = "https://github.com/alejandrolechuga/xcstrings-gate/issues"
+
+[project.scripts]
+xcstrings-gate = "xcstrings_gate:_console_entry"
+
+[tool.setuptools]
+py-modules = ["xcstrings_gate", "xcstrings_io"]
