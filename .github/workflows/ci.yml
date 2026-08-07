@@ -26,3 +26,64 @@ jobs:
         run: python -m pytest -q
       - name: Serializer self-check on the fixture
         run: python xcstrings_io.py tests/fixtures/Sample.xcstrings
+
+  # Exercises action.yml itself — the `test` job above only runs the Python.
+  # A typo in an input name, a wrong flag, or a bad `github.action_path`
+  # reference would pass `test` and break every consumer, so this job runs
+  # the real composite action via `uses: ./`.
+  #
+  # All three cases share ONE catalog fixture and vary only the baseline /
+  # flags, which is what makes them a test of the ratchet rather than of the
+  # fixture. Sample.xcstrings has exactly one enforced violation (the "" key,
+  # missing es + pt-BR) plus a `needs_review` pt-BR value on "Café".
+  action-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Positive control. The one violation is baselined, so the gate
+      #    must pass. If this fails, the action can no longer say yes.
+      - name: Baselined violation passes
+        uses: ./
+        with:
+          catalog: tests/fixtures/Sample.xcstrings
+          baseline: tests/fixtures/baseline-sample.json
+          langs: es,pt-BR
+
+      # 2. The load-bearing case. Same catalog, empty baseline — the "" key
+      #    is now unbaselined and the gate MUST reject it. A gate that always
+      #    exits 0 passes case 1; only this case proves it can still say no.
+      - name: Unbaselined violation is rejected
+        id: unbaselined
+        continue-on-error: true
+        uses: ./
+        with:
+          catalog: tests/fixtures/Sample.xcstrings
+          baseline: tests/fixtures/baseline-empty.json
+          langs: es,pt-BR
+
+      # 3. Proves `strict-states` is actually wired through the action, not
+      #    just supported by the CLI. "Café" has a needs_review pt-BR value,
+      #    which counts as translated by default and does NOT under strict.
+      - name: strict-states rejects needs_review
+        id: strict
+        continue-on-error: true
+        uses: ./
+        with:
+          catalog: tests/fixtures/Sample.xcstrings
+          baseline: tests/fixtures/baseline-sample.json
+          langs: es,pt-BR
+          strict-states: "true"
+
+      - name: Assert both negative cases failed
+        run: |
+          fail=0
+          if [ "${{ steps.unbaselined.outcome }}" != "failure" ]; then
+            echo "::error::gate ACCEPTED an unbaselined untranslated string — the ratchet is broken"
+            fail=1
+          fi
+          if [ "${{ steps.strict.outcome }}" != "failure" ]; then
+            echo "::error::strict-states did not reject a needs_review value — the input is not wired through"
+            fail=1
+          fi
+          exit $fail
