@@ -1,0 +1,95 @@
+name: xcstrings-gate
+description: >-
+  Ratcheting translation-coverage gate for Xcode String Catalogs
+  (.xcstrings). Blocks any PR that ships a new user-facing string without
+  translations, grandfathering pre-existing debt via a shrinking baseline.
+  Offline, stdlib-only, correct on plurals.
+author: Alejandro Lechuga
+branding:
+  icon: check-circle
+  color: purple
+
+inputs:
+  catalog:
+    description: >-
+      Path or glob to an .xcstrings catalog, relative to the consumer's
+      workspace. Pass multiple by separating with a newline (multi-line
+      YAML value); each non-empty line is passed as its own --catalog flag.
+    required: true
+  baseline:
+    description: >-
+      Path to the baseline JSON file (per-language {key: [missing_langs]}
+      shape). Missing file is treated as an empty baseline.
+    required: true
+  langs:
+    description: >-
+      Comma-separated list of required language codes, e.g. "es,pt-BR".
+    required: true
+  strict-states:
+    description: >-
+      When "true", only stringUnits in state "translated" count as
+      translated. Default ("false") also counts "needs_review", matching
+      Xcode's own "shows in-app" semantics.
+    required: false
+    default: "false"
+  remediation-hint:
+    description: >-
+      Optional extra line printed on failure with project-specific
+      guidance (e.g. a pointer to your translation workflow doc).
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # python3 is preinstalled on ubuntu-latest runners; the gate is
+    # stdlib-only at runtime so we deliberately avoid setup-python to keep
+    # cold-start cost near zero. If a consumer runs this on a runner
+    # without python3, they must add actions/setup-python before this step.
+    - name: xcstrings-gate
+      shell: bash
+      env:
+        XCG_CATALOGS: ${{ inputs.catalog }}
+        XCG_BASELINE: ${{ inputs.baseline }}
+        XCG_LANGS: ${{ inputs.langs }}
+        XCG_STRICT: ${{ inputs.strict-states }}
+        XCG_HINT: ${{ inputs.remediation-hint }}
+      run: |
+        set -euo pipefail
+
+        # Build the --catalog flags. Each non-empty line of the input maps
+        # to one --catalog flag; this is how consumers pass multiple
+        # catalogs (per-target, InfoPlist.xcstrings, etc.). A single-line
+        # value collapses to exactly one flag, which is the common case.
+        catalog_args=()
+        while IFS= read -r line; do
+          # Trim whitespace, skip empty lines.
+          trimmed="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          [ -z "$trimmed" ] && continue
+          catalog_args+=(--catalog "$trimmed")
+        done <<< "$XCG_CATALOGS"
+
+        if [ ${#catalog_args[@]} -eq 0 ]; then
+          echo "::error::xcstrings-gate: 'catalog' input is empty" >&2
+          exit 2
+        fi
+
+        extra_args=()
+        if [ "$XCG_STRICT" = "true" ]; then
+          extra_args+=(--strict-states)
+        fi
+        if [ -n "$XCG_HINT" ]; then
+          extra_args+=(--remediation-hint "$XCG_HINT")
+        fi
+
+        # ${{ github.action_path }} resolves to the checked-out copy of
+        # THIS action inside the runner's temporary work area, so the
+        # tool's own files are found here — while the catalog / baseline
+        # paths in the inputs resolve against the consumer's workspace
+        # (the CWD when composite steps run). That means the consumer's
+        # actions/checkout must have already run before this action.
+        python3 "${{ github.action_path }}/xcstrings_gate.py" \
+          "${catalog_args[@]}" \
+          --baseline "$XCG_BASELINE" \
+          --langs "$XCG_LANGS" \
+          "${extra_args[@]}"

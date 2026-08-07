@@ -369,7 +369,7 @@ def main(argv: list[str]) -> int:
 
 
 def _console_entry() -> None:
-    """``pyproject.toml`` ``[project.scripts]`` entry point.
+    """``pyproject.toml`` ``[project.scripts]`` entry point (public repo).
 
     Kept separate from ``main`` so ``main`` stays argv-injectable for tests.
     """
